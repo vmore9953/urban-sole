@@ -41,9 +41,9 @@ export const CheckoutModal = () => {
   // Steps: 'form' | 'upi_qr' | 'processing' | 'success'
   const [step, setStep] = useState('form');
   const [formData, setFormData] = useState({
-    fullName: 'Arjun Kapoor',
+    fullName: 'Vishal More',
     phone: '9876543210',
-    email: 'arjun.kapoor@example.com',
+    email: 'vmore9953@gmail.com',
     address: 'Old Nagar Palika, Near Dusne Jewellers',
     city: 'Yeola',
     state: 'Maharashtra',

@@ -18,7 +18,7 @@ export const AboutSection = ({ onShopNow }) => {
               Urban Sole was founded with a singular conviction: footwear should neither sacrifice sculptural sophistication for athletic cushioning nor compromise biological posture for runway silhouettes.
             </p>
             <p className="about-paragraph">
-              Born amidst the concrete rhythm of Mumbai and crafted with heritage master-cobblers across India and Italy, every silhouette we produce balances minimalist tension with nitrogen-infused kinetic response. We treat shoes as wearable structural architecture.
+              Crafted with heritage master-cobblers and precision engineering, every silhouette at Urban Sole balances minimalist tension with nitrogen-infused kinetic response. We treat shoes as wearable structural architecture.
             </p>
 
             <div className="about-cta-row">

@@ -15,7 +15,7 @@ export const REVIEWS = [
   {
     id: 'rev-02',
     name: 'Dr. Ananya Roy',
-    city: 'Bengaluru',
+    city: 'Nashik',
     productName: 'AeroStrata Minimalist Trainer',
     rating: 5,
     date: '1 week ago',
@@ -93,7 +93,7 @@ export const FAQS = [
   },
   {
     question: 'What is your shipping policy and delivery timeline across India?',
-    answer: 'We provide complimentary Express Shipping on all orders above ₹2,999. Metro deliveries typically arrive in 2 to 3 business days, while other cities receive their orders within 4 to 6 business days. Express air dispatch is prioritized from our Mumbai & Bengaluru fulfillment centers.'
+    answer: 'We provide complimentary Express Shipping on all orders above ₹2,999. Metro deliveries typically arrive in 2 to 3 business days, while other cities receive their orders within 4 to 6 business days. Express courier dispatch is prioritized directly from our Urban Sole Yeola flagship hub.'
   },
   {
     question: 'What is your return and exchange policy?',

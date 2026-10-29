@@ -369,7 +369,7 @@ export const ProductDetailModal = () => {
 
                 {activeTab === 'shipping' && (
                   <div className="tab-pane shipping-pane">
-                    <p><strong>• India Express Shipping:</strong> Orders are dispatched from Mumbai/Bengaluru fulfillment centers within 24 hours.</p>
+                    <p><strong>• India Express Shipping:</strong> Orders are dispatched directly from our Urban Sole Yeola flagship hub within 24 hours.</p>
                     <p><strong>• Delivery Timeframe:</strong> 2-3 business days for tier 1 metro cities; 4-6 days for all other pin codes.</p>
                     <p><strong>• 30-Day Hassle Free Returns:</strong> Free doorstep pickup. Full refund or size exchange with zero questions asked.</p>
                   </div>

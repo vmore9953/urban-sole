@@ -127,44 +127,31 @@ export const ContactSection = () => {
           {/* Studios & Concierge Details */}
           <div className="contact-info-col">
             <div className="studio-card">
-              <span className="studio-tag">MAIN STORE & ATELIER</span>
-              <h4 className="studio-city">Yeola Flagship Store</h4>
+              <span className="studio-tag">MAIN FLAGSHIP STORE & HEADQUARTERS</span>
+              <h4 className="studio-city">Urban Sole Yeola</h4>
               <div className="studio-detail-item">
                 <MapPin size={18} className="info-icon" />
                 <span>Old Nagar Palika, Near Dusne Jewellers, Yeola, Dist. Nashik, Maharashtra 423401</span>
               </div>
               <div className="studio-detail-item">
                 <Clock size={18} className="info-icon" />
-                <span>Monday – Sunday: 10:00 AM – 9:00 PM IST</span>
-              </div>
-            </div>
-
-            <div className="studio-card">
-              <span className="studio-tag">EXPERIENCE ATELIER 02</span>
-              <h4 className="studio-city">Bengaluru Studio</h4>
-              <div className="studio-detail-item">
-                <MapPin size={18} className="info-icon" />
-                <span>100ft Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038</span>
-              </div>
-              <div className="studio-detail-item">
-                <Clock size={18} className="info-icon" />
-                <span>Tuesday – Sunday: 11:00 AM – 8:30 PM IST</span>
+                <span>Monday – Sunday: 10:00 AM – 9:30 PM IST</span>
               </div>
             </div>
 
             <div className="concierge-direct-card">
               <div className="direct-item">
-                <Phone size={18} className="info-icon" />
+                <Mail size={18} className="info-icon" />
                 <div>
-                  <strong>Direct Concierge Desk</strong>
-                  <a href="tel:+919876543210">+91 98765 43210</a>
+                  <strong>Official Customer & Order Email</strong>
+                  <a href="mailto:vmore9953@gmail.com">vmore9953@gmail.com</a>
                 </div>
               </div>
               <div className="direct-item">
-                <Mail size={18} className="info-icon" />
+                <Phone size={18} className="info-icon" />
                 <div>
-                  <strong>Atelier Inquiries</strong>
-                  <a href="mailto:concierge@urbansole.in">concierge@urbansole.in</a>
+                  <strong>Store Support & WhatsApp Desk</strong>
+                  <a href="tel:+919876543210">+91 98765 43210 (Yeola Support Desk)</a>
                 </div>
               </div>
             </div>

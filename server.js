@@ -32,7 +32,7 @@ app.get('/api/config', (req, res) => {
   const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
   const isRazorpayConfigured = Boolean(key_id && process.env.RAZORPAY_KEY_SECRET);
   const upiId = process.env.MERCHANT_UPI_ID || process.env.VITE_MERCHANT_UPI_ID || 'urbansole.pay@okaxis';
-  const merchantName = process.env.VITE_MERCHANT_NAME || 'Urban Sole';
+  const merchantName = process.env.VITE_MERCHANT_NAME || 'Urban Sole Yeola';
 
   res.json({
     keyId: key_id,
