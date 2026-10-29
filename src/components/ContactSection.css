@@ -1,0 +1,234 @@
+/* Contact Section Styles */
+.contact-section {
+  background-color: var(--bg-light-secondary);
+}
+
+.contact-main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  margin-bottom: 5rem;
+}
+
+@media (min-width: 860px) {
+  .contact-main-grid {
+    grid-template-columns: 1.25fr 1fr;
+    gap: 3.5rem;
+  }
+}
+
+.contact-form-card {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  padding: 2.5rem 2.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.contact-card-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.contact-card-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 1.75rem;
+}
+
+.contact-form select,
+.contact-form textarea {
+  width: 100%;
+  padding: 0.75rem 0.95rem;
+  background: var(--bg-light);
+  border: 1.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.contact-form textarea {
+  resize: vertical;
+}
+
+.btn-contact-submit {
+  width: 100%;
+  padding: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.contact-success-box {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--bg-light);
+  border-radius: var(--radius-sm);
+  border: 1px dashed #10b981;
+}
+
+.success-check-icon {
+  color: #10b981;
+  margin-bottom: 1rem;
+}
+
+.contact-success-box h4 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+
+.contact-success-box p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Info Column */
+.contact-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.studio-card {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  padding: 1.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.studio-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent-warm);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.studio-city {
+  font-size: 1.25rem;
+  font-weight: 850;
+  margin-bottom: 1rem;
+}
+
+.studio-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.65rem;
+}
+
+.info-icon {
+  color: var(--accent-warm);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.concierge-direct-card {
+  background: var(--bg-dark);
+  color: #ffffff;
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-dark-lg);
+}
+
+.direct-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.direct-item .info-icon {
+  color: var(--accent-beige);
+}
+
+.direct-item strong {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-beige);
+}
+
+.direct-item a {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.direct-item a:hover {
+  text-decoration: underline;
+}
+
+/* FAQ Accordion */
+.faq-section-wrap {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.faq-header {
+  margin-bottom: 2rem;
+}
+
+.faq-title {
+  font-size: 1.85rem;
+  font-weight: 800;
+}
+
+.faq-accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.faq-item {
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.faq-item:hover {
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.faq-question-row {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.faq-q {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.faq-chevron {
+  color: var(--accent-warm);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.faq-item.active .faq-chevron {
+  transform: rotate(180deg);
+}
+
+.faq-answer-body {
+  padding: 0 1.5rem 1.35rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  animation: fadeIn 0.2s ease;
+}

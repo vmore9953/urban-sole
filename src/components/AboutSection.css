@@ -1,0 +1,234 @@
+/* About Section Styles */
+.about-section {
+  background-color: var(--bg-light-secondary);
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.about-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3.5rem;
+  align-items: center;
+  margin-bottom: 5rem;
+}
+
+@media (min-width: 960px) {
+  .about-hero-grid {
+    grid-template-columns: 1.15fr 1fr;
+    gap: 4.5rem;
+  }
+}
+
+.about-main-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.12;
+  color: var(--text-primary);
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .about-main-title {
+    font-size: 2.85rem;
+  }
+}
+
+.about-lead {
+  font-size: 1.12rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.about-paragraph {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 2rem;
+}
+
+.about-cta-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Visual stack */
+.about-visual-col {
+  position: relative;
+}
+
+.about-image-stack {
+  position: relative;
+  height: 440px;
+}
+
+.about-image-card {
+  position: absolute;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  border: 4px solid #ffffff;
+}
+
+.img-card-1 {
+  width: 75%;
+  height: 320px;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.img-card-1 img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.img-card-2 {
+  width: 70%;
+  height: 280px;
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+}
+
+.img-card-2 img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.about-floating-quote {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  background: rgba(14, 14, 16, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 0.65rem 0.95rem;
+  border-radius: var(--radius-sm);
+  color: var(--accent-beige);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* 3 Pillars */
+.about-pillars-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  margin-bottom: 5rem;
+}
+
+@media (min-width: 768px) {
+  .about-pillars-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.pillar-card {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  padding: 2.2rem 1.75rem;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-normal);
+}
+
+.pillar-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-md);
+}
+
+.pillar-icon-box {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--bg-light-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-warm);
+  margin-bottom: 1.5rem;
+}
+
+.pillar-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.pillar-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Stats Panel */
+.about-stats-panel {
+  background: var(--bg-dark);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 3rem 2.5rem;
+  box-shadow: var(--shadow-dark-lg);
+}
+
+.stats-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.stats-header h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--accent-beige);
+  margin-bottom: 0.35rem;
+}
+
+.stats-header p {
+  font-size: 0.85rem;
+  color: var(--text-light-muted);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-number {
+  font-family: var(--font-heading);
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1;
+  margin-bottom: 0.65rem;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: var(--text-light-muted);
+  line-height: 1.35;
+  max-width: 180px;
+}

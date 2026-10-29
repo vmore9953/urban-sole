@@ -1,0 +1,13 @@
+/* Urban Sole App Layout */
+.urban-sole-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+  position: relative;
+}
+
+main {
+  flex-grow: 1;
+}
