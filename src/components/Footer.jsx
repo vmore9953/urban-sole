@@ -67,7 +67,7 @@ export const Footer = ({ onNavigate }) => {
               <li><button onClick={() => onNavigate('contact')}>Size & Measurement Guide</button></li>
               <li><button onClick={() => onNavigate('contact')}>Doorstep Return Policy</button></li>
               <li><button onClick={() => onNavigate('contact')}>Track Your Order</button></li>
-              <li><button onClick={() => onNavigate('contact')}>Mumbai Flagship (BKC)</button></li>
+              <li><button onClick={() => onNavigate('contact')}>Yeola Flagship (Near Dusne Jewellers)</button></li>
               <li><button onClick={() => onNavigate('contact')}>Bengaluru Studio (100ft)</button></li>
             </ul>
           </div>

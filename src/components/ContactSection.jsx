@@ -127,15 +127,15 @@ export const ContactSection = () => {
           {/* Studios & Concierge Details */}
           <div className="contact-info-col">
             <div className="studio-card">
-              <span className="studio-tag">EXPERIENCE ATELIER 01</span>
-              <h4 className="studio-city">Mumbai Flagship</h4>
+              <span className="studio-tag">MAIN STORE & ATELIER</span>
+              <h4 className="studio-city">Yeola Flagship Store</h4>
               <div className="studio-detail-item">
                 <MapPin size={18} className="info-icon" />
-                <span>One BKC, G-Block, Bandra Kurla Complex, Mumbai, Maharashtra 400051</span>
+                <span>Old Nagar Palika, Near Dusne Jewellers, Yeola, Dist. Nashik, Maharashtra 423401</span>
               </div>
               <div className="studio-detail-item">
                 <Clock size={18} className="info-icon" />
-                <span>Monday – Sunday: 11:00 AM – 9:00 PM IST</span>
+                <span>Monday – Sunday: 10:00 AM – 9:00 PM IST</span>
               </div>
             </div>
 

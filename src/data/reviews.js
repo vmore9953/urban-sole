@@ -105,6 +105,6 @@ export const FAQS = [
   },
   {
     question: 'Can I visit an Urban Sole Experience Center in person?',
-    answer: 'Absolutely! You can experience our complete collection, get a complimentary 3D foot scan, and customize your fit at our Flagship Studios located in Bandra Kurla Complex (Mumbai) and Indiranagar 100ft Road (Bengaluru).'
+    answer: 'Absolutely! You can experience our complete collection, get a complimentary 3D foot scan, and customize your fit at our Flagship Store located at Old Nagar Palika, Near Dusne Jewellers, Yeola (Dist. Nashik, Maharashtra 423401).'
   }
 ];

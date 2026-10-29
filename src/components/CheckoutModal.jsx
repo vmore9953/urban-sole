@@ -44,10 +44,10 @@ export const CheckoutModal = () => {
     fullName: 'Arjun Kapoor',
     phone: '9876543210',
     email: 'arjun.kapoor@example.com',
-    address: 'Flat 402, Skyline Residency, Bandra West',
-    city: 'Mumbai',
+    address: 'Old Nagar Palika, Near Dusne Jewellers',
+    city: 'Yeola',
     state: 'Maharashtra',
-    pincode: '400050',
+    pincode: '423401',
     paymentMethod: 'upi' // 'upi', 'card', 'cod'
   });
 
