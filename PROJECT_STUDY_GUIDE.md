@@ -1,6 +1,6 @@
 # Urban Sole — Technical Study & Architecture Guide 👟
 
-> **A comprehensive deep-dive into the architectural patterns, technology stack, UI/UX design systems, API endpoints, payment engineering, authentication models, and component hierarchy of the Urban Sole e-commerce platform.**
+> **A comprehensive deep-dive into the architectural patterns, technology stack, UI/UX design systems, API endpoints, payment engineering, authentication models, database architecture, and component hierarchy of the Urban Sole e-commerce platform.**
 
 ---
 
@@ -11,7 +11,7 @@
 4. [UI & Design System Specifications](#4-ui--design-system-specifications)
 5. [Frontend Component Breakdown & Hierarchy](#5-frontend-component-breakdown--hierarchy)
 6. [State Management Architecture (CartContext)](#6-state-management-architecture-cartcontext)
-7. [Data Models & Schema Reference](#7-data-models--schema-reference)
+7. [Database Architecture, Collections & Schemas](#7-database-architecture-collections--schemas)
 8. [Backend Server & API Endpoint Reference](#8-backend-server--api-endpoint-reference)
 9. [Payment Gateway Engineering (UPI & Razorpay)](#9-payment-gateway-engineering-upi--razorpay)
 10. [Authentication & Security Architecture (Types, Mechanisms & JWT Comparison)](#10-authentication--security-architecture-types-mechanisms--jwt-comparison)
@@ -42,6 +42,7 @@ urban-sole/
  ├── Icons: Lucide React (Tree-shakeable SVG system)
  ├── Backend: Node.js 22 + Express 5 (ES Modules)
  ├── Security & Crypto: Node.js Native Crypto (HMAC SHA-256)
+ ├── Storage / DB: Web Storage API (localStorage) + Structured In-Memory JSON
  └── Gateway SDKs: Razorpay Node SDK + NPCI UPI Protocol
 ```
 
@@ -129,17 +130,6 @@ flowchart TD
     OrderRoute --> RzpAPI
 ```
 
-### 3.2 Client Request & State Synchronization Lifecycle
-1. **App Mount**: `main.jsx` wraps `<App />` with `<CartProvider>`.
-2. **Persistence Rehydration**: `CartProvider` reads `localStorage.getItem('urbansole_cart')` and `localStorage.getItem('urbansole_wishlist')`. If found, existing items populate state; otherwise, curated initial footwear items load.
-3. **Reactive Updates**: Whenever `cart` or `wishlist` changes, an internal `useEffect` serializes the current state back to `localStorage`.
-4. **Checkout Trigger**: Clicking checkout mounts `CheckoutModal.jsx`, which queries `/api/config` via the Vite proxy to determine live merchant details (`merchantUpiId`, `keyId`).
-5. **Payment Execution**:
-   - For **UPI**: User scans QR or taps mobile link, pays on mobile bank app, and submits the 12-digit UTR to `/api/verify-upi`.
-   - For **Card**: `loadRazorpayScript()` loads the Razorpay window, collects funds, returns signature to `/api/verify-payment` for SHA-256 HMAC cryptographic verification.
-   - For **COD**: `/api/orders/cod` records delivery details.
-6. **Order Fulfillment & Cart Reset**: Once verified, `clearCart()` empties the bag, stores order receipt, and transitions the modal to the confirmation screen.
-
 ---
 
 ## 4. UI & Design System Specifications
@@ -202,22 +192,11 @@ The application imports two Google Fonts in `index.html`:
 }
 ```
 
-### 4.3 UI Design Techniques Used
-- **Glassmorphism / Backdrop Filter**: Used in modals and sticky headers (`backdrop-filter: blur(12px)` and `background: rgba(247, 244, 238, 0.85)`).
-- **Subtle Elevation & Hover Scaling**: Product cards and action buttons feature smooth micro-transitions (`cubic-bezier(0.16, 1, 0.3, 1)`).
-- **Pill Badges**: Semantic tags (`section-tag`, `badge-popular`, `rzp-gateway-pill`, `live-realtime-badge`) provide visual hierarchy.
-- **Responsive Breakpoints**:
-  - Desktop: `> 1024px` (4-column grid, persistent sidebars)
-  - Tablet: `768px – 1023px` (2/3-column grid, stacked layouts)
-  - Mobile: `< 767px` (1-column grid, off-canvas drawers, mobile search header)
-
 ---
 
 ## 5. Frontend Component Breakdown & Hierarchy
 
 The application follows a modular component tree under `src/components/`:
-
-### Detailed Component Inventory
 
 | Component | Files | Primary Responsibility |
 | :--- | :--- | :--- |
@@ -248,80 +227,201 @@ Located in `src/context/CartContext.jsx`, the application uses React's native Co
 - `removeFromCart(productId, size, color)`: Deletes item matching compound key.
 - `updateQuantity(productId, size, color, delta)`: Modifies quantity; if quantity drops to 0, item is removed.
 - `toggleWishlist(product)`: Adds or removes product ID from saved list.
-- `applyPromo(code)`: Validates coupon:
-  - `URBANFIRST` &rarr; 15% discount
-  - `SOLE20` &rarr; 20% discount
+- `applyPromo(code)`: Validates coupon (`URBANFIRST` &rarr; 15% off, `SOLE20` &rarr; 20% off).
 - `addToast(message, type)`: Dispatches auto-dismissing toast notifications (duration: 3.2s).
 
 ---
 
-## 7. Data Models & Schema Reference
+## 7. Database Architecture, Collections & Schemas
 
-### 7.1 Product Schema (`src/data/products.js`)
-```javascript
-{
-  id: 'us-01',                               // String: Unique SKU identifier
-  name: 'Phantom Stealth Runner',             // String: Marketing title
-  series: 'Apex Series 01',                  // String: Product drop line
-  category: 'Men',                           // 'Men' | 'Women' | 'Sports' | 'Kids'
-  subcategory: 'Performance Running',        // String: Styling tag
-  price: 7499,                               // Number: INR Selling Price
-  originalPrice: 9999,                       // Number: INR MSRP for discount calculation
-  rating: 4.9,                               // Number: 1.0 - 5.0
-  reviewsCount: 142,                         // Number: Review volume
-  isNew: true,                               // Boolean: Badging flag
-  isBestseller: true,                        // Boolean: Badging flag
-  isFeatured: true,                          // Boolean: Homepage featured flag
-  description: 'Constructed with aerospace...',// String: Product narrative
-  features: [                                // Array<String>: Bulleted highlights
-    'Dual-density Supercritical SoleTech™ foam',
-    'Ultra-breathable micro-knit engineered upper'
-  ],
-  specs: {                                   // Object: Technical craftsmanship attributes
-    sole: 'Carbon-infused SoleTech™ Foam',
-    upper: 'Recycled Poly-Mesh Knit',
-    weight: '245 grams (UK 8)',
-    origin: 'Designed in Mumbai, Engineered in Italy'
-  },
-  colors: [                                  // Array<{name: string, hex: string}>
-    { name: 'Onyx Carbon', hex: '#111111' },
-    { name: 'Stone Beige', hex: '#D7CEC7' }
-  ],
-  sizes: [6, 7, 8, 9, 10, 11],               // Array<Number>: UK Footwear sizing
-  image: 'https://images.unsplash.com/...',  // String: Primary cover image
-  gallery: ['https://...', 'https://...']     // Array<String>: Angle variations
-}
+### 7.1 Current Database Implementation: Hybrid Client-Storage & In-Memory Model
+In its current release, Urban Sole uses a **Hybrid Client-Storage & Structured In-Memory Database Architecture**:
+1. **Client Persistence Layer (`localStorage`)**:
+   - `Window.localStorage.getItem('urbansole_cart')`: Acts as an ephemeral client-side document database saving cart contents, quantities, sizes, and colors.
+   - `Window.localStorage.getItem('urbansole_wishlist')`: Stores an array of favorited product IDs.
+   - Survives browser refreshes, tab closures, and computer reboots.
+2. **Product & Review Catalog Layer (`src/data/*.js`)**:
+   - Structured JSON-in-JS document database holding all footwear collections (`PRODUCTS`), departments (`CATEGORIES`), verified testimonials (`REVIEWS`), and store information (`FAQS`).
+   - Advantage: Delivers sub-millisecond instant search, filtering, and sorting without database round-trip network latency.
+3. **Transaction Audit Layer (`server.js`)**:
+   - In-memory order token generation, cryptographic HMAC signature auditing, and terminal logging.
+
+---
+
+### 7.2 Database Collections / Tables Reference (Schema Models)
+
+```mermaid
+erDiagram
+    PRODUCT ||--o{ CART_ITEM : "contains"
+    PRODUCT ||--o{ REVIEW : "has"
+    CUSTOMER ||--o{ ORDER : "places"
+    ORDER ||--|{ ORDER_ITEM : "includes"
+    ORDER ||--|| PAYMENT_TRANSACTION : "verified_by"
+
+    PRODUCT {
+        string id PK "e.g. us-01"
+        string name "Phantom Stealth Runner"
+        string series "Apex Series 01"
+        string category "Men | Women | Sports | Kids"
+        string subcategory "Performance Running"
+        number price "Selling Price (INR)"
+        number originalPrice "MSRP (INR)"
+        number rating "1.0 - 5.0"
+        number reviewsCount
+        boolean isNew
+        boolean isBestseller
+        string description
+        string array features
+        json specs
+        json colors
+        number array sizes
+        string image
+        string array gallery
+    }
+
+    CUSTOMER {
+        string fullName "e.g. Vishal More"
+        string phone "10-digit mobile"
+        string email "vmore9953@gmail.com"
+        string address "Old Nagar Palika, Near Dusne Jewellers"
+        string city "Yeola"
+        string state "Maharashtra"
+        string pincode "423401"
+    }
+
+    ORDER {
+        string orderId PK "e.g. US-505561"
+        string customerEmail FK
+        number totalAmount "INR"
+        number subtotal "INR"
+        number discountAmount "INR"
+        number shippingFee "INR"
+        string status "VERIFIED_PAID | COD_PENDING"
+        string paymentMethod "UPI_QR_DIRECT | RAZORPAY_CARD | COD"
+        datetime createdAt
+    }
+
+    PAYMENT_TRANSACTION {
+        string transactionId PK "Bank UTR or Razorpay pay_id"
+        string orderId FK
+        string gateway "NPCI_UPI | RAZORPAY"
+        string signature "HMAC SHA-256 hash"
+        string status "SUCCESS | FAILED"
+        datetime verifiedAt
+    }
 ```
 
-### 7.2 Cart Item Schema (Stored in `localStorage`)
-```javascript
-{
-  product: { ... },  // Full Product object reference
-  size: 9,           // Selected UK size
-  color: 'Onyx Carbon', // Selected colorway string
-  quantity: 1        // Integer count
-}
+#### Collection 1: `products`
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | Yes | Unique SKU identifier (e.g. `'us-01'`) |
+| `name` | `String` | Yes | Footwear name |
+| `series` | `String` | No | Drop edition (e.g. `'Apex Series 01'`) |
+| `category` | `String` | Yes | Target gender/type: `'Men'`, `'Women'`, `'Sports'`, `'Kids'` |
+| `subcategory` | `String` | Yes | Niche category (e.g. `'Lifestyle Trainers'`) |
+| `price` | `Number` | Yes | Current price in Indian Rupees |
+| `originalPrice` | `Number` | No | Strikethrough comparison MSRP |
+| `rating` | `Number` | Yes | Float rating (e.g. `4.9`) |
+| `reviewsCount`| `Number` | Yes | Number of verified customer reviews |
+| `specs` | `Object` | Yes | `{ sole: String, upper: String, weight: String, origin: String }` |
+| `colors` | `Array<Object>`| Yes | `[{ name: 'Onyx Carbon', hex: '#111111' }]` |
+| `sizes` | `Array<Number>`| Yes | Available UK sizing array `[6, 7, 8, 9, 10, 11]` |
+| `image` | `String` | Yes | Primary high-res thumbnail URL |
+| `gallery` | `Array<String>`| No | Multi-angle photographic showcase URLs |
+
+#### Collection 2: `orders`
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `orderId` | `String` | Yes | Primary Key tracking reference (e.g. `'US-701960'`) |
+| `customer` | `Object` | Yes | Embedded customer object: `{ fullName, phone, email, address, city, state, pincode }` |
+| `items` | `Array<Object>`| Yes | Array of ordered items: `[{ productId, name, size, color, quantity, price }]` |
+| `subtotal` | `Number` | Yes | Pre-discount footwear subtotal |
+| `discountAmount`| `Number`| Yes | Coupon discount deducted in INR |
+| `shippingFee` | `Number` | Yes | Delivery fee (`0` if subtotal >= 2999, else `250`) |
+| `totalAmount` | `Number` | Yes | Final payable amount |
+| `paymentMethod`| `String` | Yes | `'UPI_QR_DIRECT'`, `'RAZORPAY_CARD'`, or `'COD'` |
+| `paymentId` | `String` | Yes | Bank 12-digit UTR reference or Razorpay payment ID |
+| `status` | `String` | Yes | `'VERIFIED_PAID'` or `'COD_PENDING'` |
+| `createdAt` | `Date` | Yes | ISO timestamp of order placement |
+
+#### Collection 3: `reviews`
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | Yes | Review ID (e.g. `'rev-01'`) |
+| `name` | `String` | Yes | Reviewer customer name |
+| `city` | `String` | Yes | Customer city location (e.g. `'Yeola'`, `'Nashik'`) |
+| `productName` | `String` | Yes | Footwear model reviewed |
+| `rating` | `Number` | Yes | Star score: `1` to `5` |
+| `title` | `String` | Yes | Headline summary of review |
+| `content` | `String` | Yes | Testimonial narrative |
+| `likes` | `Number` | Yes | Helpful upvote counter |
+
+---
+
+### 7.3 Production Database Migration: How to Plug in MongoDB (Mongoose)
+
+If you wish to replace the in-memory/localStorage layer with **MongoDB & Mongoose**, here is the exact copy-paste blueprint:
+
+#### Step 1: Install Mongoose in Backend
+```bash
+npm install mongoose
 ```
 
-### 7.3 Verified Order Record Schema
+#### Step 2: Define Mongoose Schemas (`server/models/Order.js`)
 ```javascript
-{
-  orderId: 'US-505561',                      // String: Internal unique tracking code
-  amount: 7499,                              // Number: Total amount in INR
-  paymentMethod: 'UPI_QR_DIRECT',            // 'UPI_QR_DIRECT' | 'RAZORPAY_CARD' | 'COD'
-  paymentId: '987654321012',                 // String: 12-digit Bank UTR or Razorpay pay_id
-  status: 'VERIFIED_PAID',                   // 'VERIFIED_PAID' | 'COD_PENDING'
-  verifiedAt: '2026-10-29T05:14:40.106Z',    // String: ISO Timestamp
+import mongoose from 'mongoose';
+
+const OrderSchema = new mongoose.Schema({
+  orderId: { type: String, required: true, unique: true },
   customer: {
-    fullName: 'Vishal More',
-    phone: '9876543210',
-    email: 'vmore9953@gmail.com',
-    address: 'Old Nagar Palika, Near Dusne Jewellers',
-    city: 'Yeola',
-    state: 'Maharashtra',
-    pincode: '423401'
-  }
-}
+    fullName: { type: String, required: true },
+    phone: { type: String, required: true },
+    email: { type: String, required: true },
+    address: { type: String, required: true },
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    pincode: { type: String, required: true }
+  },
+  items: [{
+    productId: String,
+    name: String,
+    size: Number,
+    color: String,
+    quantity: Number,
+    price: Number
+  }],
+  totalAmount: { type: Number, required: true },
+  paymentMethod: { type: String, enum: ['UPI_QR_DIRECT', 'RAZORPAY_CARD', 'COD'], required: true },
+  paymentId: { type: String, required: true },
+  status: { type: String, default: 'VERIFIED_PAID' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+export const Order = mongoose.model('Order', OrderSchema);
+```
+
+#### Step 3: Connect to MongoDB in `server.js`
+```javascript
+import mongoose from 'mongoose';
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/urbansole')
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch((err) => console.error('❌ MongoDB connection error:', err));
+```
+
+#### Step 4: Persist in Payment Verification Endpoint
+```javascript
+// Inside /api/verify-upi or /api/verify-payment in server.js:
+const newOrder = new Order({
+  orderId,
+  customer: customerData,
+  items: cartItems,
+  totalAmount,
+  paymentMethod: 'UPI_QR_DIRECT',
+  paymentId: utrNumber,
+  status: 'VERIFIED_PAID'
+});
+await newOrder.save();
 ```
 
 ---
@@ -329,8 +429,6 @@ Located in `src/context/CartContext.jsx`, the application uses React's native Co
 ## 8. Backend Server & API Endpoint Reference
 
 The backend runs on **Express 5** via `server.js` on Port `5000` (or `process.env.PORT`).
-
-### 8.1 API Endpoints Summary
 
 ```
 GET   /api/config          -> Fetch gateway credentials & merchant UPI ID
@@ -375,157 +473,6 @@ upi://pay?pa=urbansole.pay@okaxis&pn=Urban%20Sole%20Yeola&am=7499&cu=INR&tn=Urba
 
 ---
 
-### 10.2 Detailed Breakdown of Authentication Types
-
-#### A. Guest-First Session Identity Model (Why NOT JWT by Default?)
-In modern e-commerce (such as Shopify, Nike SNKRS, and Yeezy), requiring users to register a username, confirm an email verification link, and memorize a password before adding a sneaker to their bag leads to a **30%–35% cart abandonment drop-off**.
-- **Urban Sole uses a Guest-First Identity Model**:
-  1. The user's active shopping session is preserved locally in `Window.localStorage`.
-  2. At checkout, the customer provides verified contact credentials: **Full Name**, **10-Digit Mobile Number**, and **Email Address**.
-  3. The system generates an authoritative order token (`#US-XXXXXX` or `#US-COD-XXXXXX`) that binds the customer identity, order items, and verified payment receipt together.
-
-#### B. Delegated Banking Two-Factor Authentication (2FA)
-The platform adheres strictly to **PCI-DSS compliance guidelines** by never storing or touching customer credit card numbers, CVVs, passwords, or UPI PINs on its own servers:
-- **Instant UPI 2FA**:
-  - *Factor 1 (Possession)*: The customer's physical smartphone running an authorized app (GPay, PhonePe, Paytm, BHIM, Cred).
-  - *Factor 2 (Knowledge)*: The customer's secret 4-digit or 6-digit **NPCI UPI MPIN** entered on their bank's encrypted keyboard.
-- **Card 3D Secure 2.0**:
-  - Authenticated via dynamic One-Time Passwords (OTP) sent to the cardholder's mobile by their issuing bank.
-
-#### C. Cryptographic HMAC-SHA256 Signature Authentication
-To ensure that an attacker cannot spoof or tamper with payment receipts (e.g., claiming they paid ₹7,499 when they only paid ₹1), the backend implements **HMAC-SHA256 digital signature verification**:
-1. When Razorpay confirms payment on the client, it returns a cryptographically signed payload:
-   - `razorpay_order_id`
-   - `razorpay_payment_id`
-   - `razorpay_signature`
-2. The client transmits these tokens to `POST /api/verify-payment`.
-3. The Express server uses Node's native `crypto` module to compute the HMAC hash using its private `RAZORPAY_KEY_SECRET`:
-   ```javascript
-   const body = razorpay_order_id + '|' + razorpay_payment_id;
-   const expectedSignature = crypto
-     .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-     .update(body.toString())
-     .digest('hex');
-
-   const isAuthentic = (expectedSignature === razorpay_signature);
-   ```
-4. If the signature matches, the server authenticates the transaction as legitimate and updates the order status to `VERIFIED_PAID`.
-
----
-
-### 10.3 Comparison: Urban Sole Model vs. JWT vs. Session Cookies vs. OAuth 2.0
-
-| Feature | Urban Sole Current Model | JSON Web Tokens (JWT) | Traditional Session Cookies | OAuth 2.0 (Google/GitHub) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Primary Purpose** | High-conversion D2C guest checkout & cryptographic payment verification | User login, profile dashboards & RBAC API protection | Server-side user session management | 1-Click third-party social sign-in |
-| **Where State Lives** | `localStorage` + Ephemeral order payload + Server HMAC | Client-side signed string (`header.payload.signature`) | Server memory / Redis table (`connect.sid` cookie) | Identity Provider (Google, Apple) |
-| **Pre-Checkout Friction** | **Zero friction** (No password or signup barrier) | Requires registration/login screen before or during checkout | Requires login session establishment | 1-click popup authorization |
-| **Payment Security** | HMAC SHA-256 Signature Verification + NPCI MPIN 2FA | HMAC SHA-256 / RSA Token Verification | Session ID validation | Scoped OAuth Access Token |
-| **Best Used For** | Fast e-commerce purchases, mobile UPI scan-and-pay | User profile dashboards, order history archives, admin CMS | Enterprise portals, traditional web apps | Quick login without memorizing passwords |
-
----
-
-### 10.4 Secrets Isolation & Frontend-Backend Security Boundary
-The application strictly isolates public client parameters from sensitive backend secrets:
-- **Client-Safe Variables (`VITE_` prefix in `.env`)**:
-  - `VITE_MERCHANT_UPI_ID`: Public receiving UPI address displayed in the QR code.
-  - `VITE_MERCHANT_NAME`: Public store name displayed in the QR code and checkout header.
-  - `VITE_RAZORPAY_KEY_ID`: Public gateway identifier used by the client-side Razorpay SDK modal.
-- **Server-Only Secrets (Never bundled into frontend JavaScript)**:
-  - `RAZORPAY_KEY_SECRET`: Private merchant secret used solely by Express in `server.js` to sign and verify HMAC signatures.
-  - Excluded from version control via `.gitignore` (`.env`, `*.env`, `.env*.local`).
-
----
-
-### 10.5 Production Roadmap: How to Add Full JWT (JSON Web Token) User Accounts
-
-If your project requirements (or university/interview evaluation) require **JWT Authentication**, here is the exact blueprint and code implementation to add it:
-
-```mermaid
-flowchart LR
-    subgraph ClientAuth ["Frontend Client (React 19)"]
-        LoginForm["Login / Register Form\n(Email + Password)"]
-        JWTStorage["Stores JWT Token in\nhttpOnly Cookie or localStorage"]
-        AuthContext["AuthContext.Provider\n(currentUser, isAuthenticated)"]
-    end
-
-    subgraph BackendAuth ["Express Server (server.js)"]
-        AuthRoute["POST /api/auth/register\nPOST /api/auth/login"]
-        Bcrypt["bcrypt.hash()\nbcrypt.compare()"]
-        JWTIssuer["jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })"]
-        AuthMiddleware["authenticateToken(req, res, next)"]
-    end
-
-    subgraph Database ["Database (MongoDB / PostgreSQL)"]
-        UsersTable[("Users Table\n• id • email • password_hash • role")]
-        OrdersTable[("Orders Table\n• id • user_id • items • amount • status")]
-    end
-
-    LoginForm --> AuthRoute
-    AuthRoute --> Bcrypt --> UsersTable
-    AuthRoute --> JWTIssuer --> JWTStorage
-    JWTStorage --> AuthContext
-    AuthContext -- Authorization: Bearer <JWT> --> AuthMiddleware
-    AuthMiddleware --> OrdersTable
-```
-
-#### Step 1: Install JWT and Password Hashing Libraries
-```bash
-npm install jsonwebtoken bcrypt
-```
-
-#### Step 2: Add Auth Routes in `server.js`
-```javascript
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'urbansole_super_secret_jwt_key_2026';
-
-// 1. User Registration Route
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
-  
-  // Save { name, email, password: hashedPassword } to database
-  const user = { id: `usr_${Date.now()}`, name, email };
-  const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-  
-  res.json({ success: true, token, user });
-});
-
-// 2. User Login Route
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  // Retrieve user from database by email
-  // const isMatch = await bcrypt.compare(password, user.password);
-  
-  const token = jwt.sign({ userId: 'usr_123', email }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ success: true, token });
-});
-
-// 3. Protected Route Middleware (Verifies JWT)
-export const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // "Bearer <TOKEN>"
-
-  if (!token) return res.status(401).json({ error: 'Access token required' });
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-    req.user = user;
-    next();
-  });
-};
-
-// 4. Protected User Order History Route
-app.get('/api/user/orders', authenticateToken, (req, res) => {
-  // Query orders belonging to req.user.userId
-  res.json({ orders: [] });
-});
-```
-
----
-
 ## 11. Local Development, Build & Run Procedures
 
 ### 11.1 Environment Configuration (`.env`)
@@ -561,14 +508,13 @@ VITE_RAZORPAY_KEY_ID=
 
 Use these questions to test and solidify your understanding of the codebase:
 
-1. **Authentication Classification**: What type of customer authentication does Urban Sole currently use, and why is this preferred for high-conversion D2C footwear stores over mandatory JWT pre-login?
-2. **Cryptographic Signatures vs JWT**: How does the HMAC-SHA256 signature verification in `POST /api/verify-payment` provide similar cryptographic mathematical proof of data integrity to a JWT token signature?
-3. **Payment 2FA**: How does Two-Factor Authentication (2FA) protect transactions when a customer scans the dynamic UPI QR code on their phone?
-4. **Architecture**: Why does the project use `concurrently` in `npm run dev:all` instead of running two separate terminal commands?
-5. **State Management**: Why is `CartContext` placed at the top level of `App.jsx`, and how does `localStorage` prevent cart loss on page refresh?
-6. **Vite Proxy**: In `vite.config.js`, what does `server.proxy['/api']` do when the React client makes a call to `fetch('/api/create-order')`?
-7. **Security Boundary**: Why must `RAZORPAY_KEY_SECRET` never be prefixed with `VITE_` or imported inside a React `.jsx` file?
-8. **JWT Implementation**: If you need to add registered user profiles to this project, what libraries would you install and where would the JWT verification middleware sit?
+1. **Database Architecture**: How does Urban Sole currently persist the user's cart without requiring a local MongoDB or PostgreSQL installation?
+2. **Collections & Schemas**: What are the key fields stored in an `Order` document when an instant UPI QR payment is confirmed?
+3. **Database Migration**: If you connect MongoDB via `mongoose.connect()`, which Express endpoint would call `await newOrder.save()`?
+4. **Authentication Classification**: What type of customer authentication does Urban Sole currently use, and why is this preferred for high-conversion D2C footwear stores over mandatory JWT pre-login?
+5. **Cryptographic Signatures vs JWT**: How does the HMAC-SHA256 signature verification in `POST /api/verify-payment` provide similar cryptographic mathematical proof of data integrity to a JWT token signature?
+6. **Payment 2FA**: How does Two-Factor Authentication (2FA) protect transactions when a customer scans the dynamic UPI QR code on their phone?
+7. **Pricing Engine**: How does `subtotal >= 2999` dynamically recalculate the free shipping progress meter, shipping fee waiver, and final total?
 
 ---
 
