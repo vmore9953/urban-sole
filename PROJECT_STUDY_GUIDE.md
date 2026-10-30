@@ -1,6 +1,6 @@
 # Urban Sole — Technical Study & Architecture Guide 👟
 
-> **A comprehensive deep-dive into the architectural patterns, technology stack, UI/UX design systems, API endpoints, payment engineering, and component hierarchy of the Urban Sole e-commerce platform.**
+> **A comprehensive deep-dive into the architectural patterns, technology stack, UI/UX design systems, API endpoints, payment engineering, authentication models, and component hierarchy of the Urban Sole e-commerce platform.**
 
 ---
 
@@ -14,8 +14,9 @@
 7. [Data Models & Schema Reference](#7-data-models--schema-reference)
 8. [Backend Server & API Endpoint Reference](#8-backend-server--api-endpoint-reference)
 9. [Payment Gateway Engineering (UPI & Razorpay)](#9-payment-gateway-engineering-upi--razorpay)
-10. [Local Development, Build & Run Procedures](#10-local-development-build--run-procedures)
-11. [Study Questions & Self-Evaluation Checklist](#11-study-questions--self-evaluation-checklist)
+10. [Authentication, Security & Cryptographic Verification Architecture](#10-authentication-security--cryptographic-verification-architecture)
+11. [Local Development, Build & Run Procedures](#11-local-development-build--run-procedures)
+12. [Study Questions & Self-Evaluation Checklist](#12-study-questions--self-evaluation-checklist)
 
 ---
 
@@ -360,9 +361,137 @@ upi://pay?pa=urbansole.pay@okaxis&pn=Urban%20Sole%20Yeola&am=7499&cu=INR&tn=Urba
 
 ---
 
-## 10. Local Development, Build & Run Procedures
+## 10. Authentication, Security & Cryptographic Verification Architecture
 
-### 10.1 Environment Configuration (`.env`)
+Understanding how authentication and security work in an e-commerce platform is critical. Urban Sole implements a **multi-tiered security and authentication model** tailored for direct-to-consumer (D2C) transactions:
+
+```mermaid
+flowchart TD
+    subgraph Tier1 ["Tier 1: Customer Identity Model"]
+        Guest["Guest-First Frictionless Checkout\n(Zero Pre-Purchase Password Wall)"]
+        Capture["Order Identity Capture\n• Verified 10-Digit Phone\n• Contact Email • Delivery Pincode"]
+        Session["Browser Session Identity\n• LocalStorage Key Serialization\n• Client Session Tokens"]
+    end
+
+    subgraph Tier2 ["Tier 2: Payment Authentication (2FA)"]
+        UPI2FA["UPI 2-Factor Authentication\nNPCI MPIN on Mobile Device\n(Handled inside Google Pay / PhonePe)"]
+        Card2FA["Card 3D-Secure 2.0\nBank OTP Verification\n(Delegated to Razorpay Cloud)"]
+    end
+
+    subgraph Tier3 ["Tier 3: Cryptographic Server Integrity"]
+        HMAC["HMAC SHA-256 Signature\nPayload = order_id + '|' + payment_id\nSecret = RAZORPAY_KEY_SECRET"]
+        UTR["NPCI Bank UTR Validation\n12-Digit Numeric Checksum & Audit"]
+        Env["Secrets Isolation\n.env gitignored • Client/Server Separation"]
+    end
+
+    Tier1 --> Tier2 --> Tier3
+```
+
+### 10.1 Customer Authentication Model: Guest-First Architecture
+- **Why Guest Checkout?**
+  In modern high-fashion and sneaker e-commerce (such as Shopify Plus stores, Nike SNKRS, and Yeezy drops), forcing users to create an account, verify an email link, and create passwords before checkout results in a **30%–35% cart abandonment rate**. 
+- **How Identity is Handled**:
+  1. The user's shopping state (Cart, Wishlist, Active Promo Voucher) is bound to the client instance via persistent `localStorage` (`urbansole_cart` and `urbansole_wishlist`).
+  2. At checkout, the user provides their authoritative contact identity:
+     - **Full Name**
+     - **10-Digit Mobile Number** (Used for courier SMS dispatch updates)
+     - **Email Address** (Used for digital order receipts and dispatch tracking)
+     - **Delivery Address & PIN Code**
+  3. This identity is cryptographically tied to the unique generated Order ID (`#US-XXXXXX` or `#US-COD-XXXXXX`).
+
+### 10.2 Payment Authentication: Delegated 2-Factor Authentication (2FA)
+The application never handles or stores sensitive credit card numbers, CVVs, bank passwords, or UPI PINs directly on the application server. Authentication is delegated to regulated financial institutions:
+
+1. **UPI Two-Factor Authentication**:
+   - Factor 1 (Possession): The customer's physical smartphone running an authorized UPI application (GPay, PhonePe, Paytm, BHIM, Cred).
+   - Factor 2 (Knowledge): The customer's secret 4-digit or 6-digit **NPCI UPI MPIN** entered directly into their bank's encrypted keyboard interface.
+2. **Card Two-Factor Authentication (3D Secure 2.0)**:
+   - When paying via Razorpay, the cardholder is authenticated via an SMS One-Time Password (OTP) or bank biometric approval mandated by the Reserve Bank of India (RBI).
+
+### 10.3 Cryptographic Server-to-Server Authentication: HMAC SHA-256
+To prevent payment tampering (e.g. an attacker modifying a client-side JavaScript file to report a successful transaction for ₹1 instead of ₹7,499), Urban Sole enforces **server-side cryptographic verification**:
+
+1. When a transaction completes on Razorpay, Razorpay sends back three fields to the frontend:
+   - `razorpay_order_id`
+   - `razorpay_payment_id`
+   - `razorpay_signature`
+2. The frontend sends these three values to `server.js`: `POST /api/verify-payment`.
+3. The Express backend uses Node's native `crypto` library to recalculate the expected signature using the private `RAZORPAY_KEY_SECRET`:
+   ```javascript
+   const body = razorpay_order_id + '|' + razorpay_payment_id;
+   const expectedSignature = crypto
+     .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+     .update(body.toString())
+     .digest('hex');
+
+   const isAuthentic = (expectedSignature === razorpay_signature);
+   ```
+4. If `isAuthentic === true`, the order status transitions to `VERIFIED_PAID`. If the payload was tampered with, the HMAC hash does not match, and the transaction is immediately rejected with HTTP 400.
+
+### 10.4 Secrets Isolation & Frontend-Backend Boundary
+The codebase strictly separates public environment variables from private server secrets:
+- **Client-Safe Keys (`VITE_` prefix)**:
+  - `VITE_MERCHANT_UPI_ID`: Public receiving UPI address displayed in the QR code.
+  - `VITE_MERCHANT_NAME`: Public store name displayed in the QR code and checkout header.
+  - `VITE_RAZORPAY_KEY_ID`: Public gateway identifier used by the client-side Razorpay SDK modal.
+- **Server-Only Secrets (Never bundled into frontend JavaScript)**:
+  - `RAZORPAY_KEY_SECRET`: Private merchant secret used solely by Express in `server.js` to sign and verify HMAC signatures.
+  - Excluded from version control via `.gitignore` (`.env`, `*.env`, `.env*.local`).
+
+### 10.5 Production Roadmap: How to Add Full User Login / JWT Accounts
+If you choose to extend the project with traditional registered user accounts, here is the recommended architecture pattern:
+
+```mermaid
+flowchart LR
+    subgraph ClientAuth ["Frontend Client"]
+        LoginForm["Login / Register Form\n(Email + Password / Phone OTP)"]
+        JWTStorage["Stores JWT Token in\nhttpOnly Cookie or Memory"]
+        AuthContext["AuthContext.Provider\n(currentUser, isAuthenticated)"]
+    end
+
+    subgraph BackendAuth ["Express Server"]
+        AuthRoute["POST /api/auth/register\nPOST /api/auth/login"]
+        Bcrypt["bcrypt.hash()\nbcrypt.compare()"]
+        JWTIssuer["jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })"]
+        AuthMiddleware["authenticateToken(req, res, next)"]
+    end
+
+    subgraph Database ["Database (MongoDB / PostgreSQL)"]
+        UsersTable[("Users Table\n• id • email • password_hash • role")]
+        OrdersTable[("Orders Table\n• id • user_id • items • amount • status")]
+    end
+
+    LoginForm --> AuthRoute
+    AuthRoute --> Bcrypt --> UsersTable
+    AuthRoute --> JWTIssuer --> JWTStorage
+    JWTStorage --> AuthContext
+    AuthContext -- Authorization: Bearer JWT --> AuthMiddleware
+    AuthMiddleware --> OrdersTable
+```
+
+1. **Password Hashing**: Use `bcrypt` or `argon2` to hash user passwords before storing in a `users` table or MongoDB collection (salt rounds: 10–12).
+2. **Token Generation**: Upon successful authentication, the server signs a **JSON Web Token (JWT)** containing `{ userId, email, role }` signed with a secure `JWT_SECRET`.
+3. **Protected Routes Middleware**:
+   ```javascript
+   export const verifyToken = (req, res, next) => {
+     const authHeader = req.headers['authorization'];
+     const token = authHeader && authHeader.split(' ')[1];
+     if (!token) return res.status(401).json({ error: 'Access token required' });
+
+     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+       if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+       req.user = user;
+       next();
+     });
+   };
+   ```
+4. **Order History Association**: When `req.user` is present during checkout, orders are linked to `user.id`, allowing customers to view past purchases and track ongoing deliveries in an "Account / My Orders" dashboard.
+
+---
+
+## 11. Local Development, Build & Run Procedures
+
+### 11.1 Environment Configuration (`.env`)
 The project reads configurations from `.env`:
 ```env
 PORT=5000
@@ -379,7 +508,7 @@ RAZORPAY_KEY_SECRET=
 VITE_RAZORPAY_KEY_ID=
 ```
 
-### 10.2 NPM Scripts Reference
+### 11.2 NPM Scripts Reference
 | Command | Action |
 | :--- | :--- |
 | **`npm run dev:all`** | Runs both backend Express server (`node server.js`) and Vite client concurrently using `concurrently`. |
@@ -391,17 +520,18 @@ VITE_RAZORPAY_KEY_ID=
 
 ---
 
-## 11. Study Questions & Self-Evaluation Checklist
+## 12. Study Questions & Self-Evaluation Checklist
 
 Use these questions to test and solidify your understanding of the codebase:
 
 1. **Architecture**: Why does the project use `concurrently` in `npm run dev:all` instead of running two separate terminal commands?
 2. **State Management**: Why is `CartContext` placed at the top level of `App.jsx`, and how does `localStorage` prevent cart loss on page refresh?
 3. **Vite Proxy**: In `vite.config.js`, what does `server.proxy['/api']` do when the React client makes a call to `fetch('/api/create-order')`?
-4. **Security**: Why must Razorpay signature verification (`crypto.createHmac`) happen on the Node.js backend rather than inside React frontend code?
-5. **Design System**: Where are global colors and font definitions stored, and what CSS variable controls the warm cream background?
-6. **Payments**: What happens when a user clicks the **"Open in UPI App (Mobile)"** link on an Android smartphone?
-7. **Pricing Engine**: How does `subtotal >= 2999` dynamically recalculate the free shipping indicator and overall total?
+4. **Authentication**: Why do modern luxury D2C footwear platforms often choose a **Guest-First checkout** model over mandatory pre-checkout password registration?
+5. **Security & Cryptography**: How does the Express backend use Node's native `crypto.createHmac` with SHA-256 to ensure that a customer cannot tamper with the order amount returned by Razorpay?
+6. **Payment 2FA**: Where does the 2-Factor Authentication (2FA) take place when a customer scans the dynamic UPI QR code on their phone?
+7. **Design System**: Where are global colors and font definitions stored, and what CSS variable controls the warm cream paper background?
+8. **Pricing Engine**: How does `subtotal >= 2999` dynamically recalculate the free shipping progress meter, shipping fee waiver, and final total?
 
 ---
 
