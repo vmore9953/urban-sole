@@ -305,7 +305,15 @@ export const CheckoutModal = () => {
               await fetch('/api/verify-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(response)
+                body: JSON.stringify({
+                  ...response,
+                  customerData: formData,
+                  cartItems: cart,
+                  totalAmount,
+                  subtotal,
+                  discountAmount,
+                  shippingFee
+                })
               });
             } catch (vErr) {
               console.error('Verification error:', vErr);
@@ -365,7 +373,11 @@ export const CheckoutModal = () => {
           orderId,
           utrNumber: cleanUtr,
           amount: totalAmount,
-          customerData: formData
+          customerData: formData,
+          cartItems: cart,
+          subtotal,
+          discountAmount,
+          shippingFee
         })
       });
 

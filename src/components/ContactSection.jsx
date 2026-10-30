@@ -24,9 +24,19 @@ export const ContactSection = () => {
     message: ''
   });
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) return;
+
+    try {
+      await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+    } catch (err) {
+      console.warn('Backend inquiry submission bypassed:', err);
+    }
 
     setFormSubmitted(true);
     addToast('Message received! Our footwear concierge will reply within 4 business hours.', 'success');

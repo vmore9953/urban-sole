@@ -3,6 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
+import mongoose from 'mongoose';
+import { Order } from './models/Order.js';
+import { Inquiry } from './models/Inquiry.js';
 
 dotenv.config();
 
@@ -12,7 +15,90 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Initialize Razorpay instance if keys are set
+// =========================================================================
+// MongoDB Connection via Mongoose
+// =========================================================================
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/urbansole';
+let isDbConnected = false;
+
+mongoose.set('strictQuery', false);
+
+const connectMongoDB = async () => {
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000 // 5 seconds timeout
+    });
+    isDbConnected = true;
+    console.log('✅ MongoDB connected successfully to database:', mongoose.connection.name);
+  } catch (err) {
+    isDbConnected = false;
+    console.warn('⚠️  MongoDB connection notice:', err.message);
+    console.log('👉 To connect a cloud database, set MONGODB_URI in your .env file with your MongoDB Atlas connection string.');
+  }
+};
+
+connectMongoDB();
+
+mongoose.connection.on('connected', () => {
+  isDbConnected = true;
+});
+
+mongoose.connection.on('disconnected', () => {
+  isDbConnected = false;
+});
+
+// Helper: Safely save order to MongoDB if connected
+const saveOrderToDatabase = async (orderPayload) => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      // Format items array
+      const items = (orderPayload.cartItems || []).map((item) => ({
+        productId: item.product?.id || 'unknown',
+        name: item.product?.name || 'Footwear',
+        size: Number(item.size) || 8,
+        color: item.color || 'Default',
+        quantity: Number(item.quantity) || 1,
+        price: Number(item.product?.price) || 0,
+        image: item.product?.image || ''
+      }));
+
+      const doc = new Order({
+        orderId: orderPayload.orderId,
+        customer: {
+          fullName: orderPayload.customerData?.fullName || 'Guest Customer',
+          phone: orderPayload.customerData?.phone || '',
+          email: orderPayload.customerData?.email || '',
+          address: orderPayload.customerData?.address || '',
+          city: orderPayload.customerData?.city || 'Yeola',
+          state: orderPayload.customerData?.state || 'Maharashtra',
+          pincode: orderPayload.customerData?.pincode || '423401'
+        },
+        items,
+        subtotal: Number(orderPayload.subtotal) || 0,
+        discountAmount: Number(orderPayload.discountAmount) || 0,
+        shippingFee: Number(orderPayload.shippingFee) || 0,
+        totalAmount: Number(orderPayload.totalAmount) || 0,
+        paymentMethod: orderPayload.paymentMethod,
+        paymentId: orderPayload.paymentId || 'PENDING',
+        status: orderPayload.status || 'VERIFIED_PAID'
+      });
+
+      const saved = await doc.save();
+      console.log(`📦 Order #${saved.orderId} successfully persisted in MongoDB collection 'orders'.`);
+      return { saved: true, id: saved._id };
+    } else {
+      console.log(`ℹ️  Order #${orderPayload.orderId} processed in-memory (MongoDB connection not active).`);
+      return { saved: false, reason: 'MongoDB not connected' };
+    }
+  } catch (dbError) {
+    console.error(`❌ Failed to save order #${orderPayload.orderId} to MongoDB:`, dbError.message);
+    return { saved: false, error: dbError.message };
+  }
+};
+
+// =========================================================================
+// Razorpay Client Initialization
+// =========================================================================
 const getRazorpayInstance = () => {
   const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
   const key_secret = process.env.RAZORPAY_KEY_SECRET;
@@ -27,7 +113,11 @@ const getRazorpayInstance = () => {
   });
 };
 
-// 1. Get Payment Configurations
+// =========================================================================
+// API ENDPOINTS
+// =========================================================================
+
+// 1. Get Payment Configurations & Database Health
 app.get('/api/config', (req, res) => {
   const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
   const isRazorpayConfigured = Boolean(key_id && process.env.RAZORPAY_KEY_SECRET);
@@ -39,14 +129,30 @@ app.get('/api/config', (req, res) => {
     isRazorpayConfigured,
     upiId,
     merchantName,
+    database: {
+      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      readyState: mongoose.connection.readyState,
+      databaseName: mongoose.connection.name || 'urbansole'
+    },
     serverTime: new Date().toISOString()
   });
 });
 
-// 2. Real-Time UPI Payment Verification (UTR verification)
-app.post('/api/verify-upi', (req, res) => {
+// Database status diagnostic endpoint
+app.get('/api/db-status', (req, res) => {
+  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  res.json({
+    connected: mongoose.connection.readyState === 1,
+    status: states[mongoose.connection.readyState] || 'unknown',
+    database: mongoose.connection.name || 'urbansole',
+    host: mongoose.connection.host || 'none'
+  });
+});
+
+// 2. Real-Time UPI Payment Verification & MongoDB Order Save
+app.post('/api/verify-upi', async (req, res) => {
   try {
-    const { orderId, utrNumber, amount, customerData } = req.body;
+    const { orderId, utrNumber, amount, customerData, cartItems, subtotal, discountAmount, shippingFee } = req.body;
 
     if (!orderId) {
       return res.status(400).json({ error: 'Order ID is required' });
@@ -54,7 +160,6 @@ app.post('/api/verify-upi', (req, res) => {
 
     const cleanUtr = (utrNumber || '').trim();
 
-    // Indian Banking UPI UTR numbers are 12 numeric digits
     if (cleanUtr && cleanUtr.length < 6) {
       return res.status(400).json({
         success: false,
@@ -62,15 +167,31 @@ app.post('/api/verify-upi', (req, res) => {
       });
     }
 
+    const assignedUtr = cleanUtr || `UPI-MANUAL-${Math.floor(100000 + Math.random() * 900000)}`;
+
     const verifiedOrder = {
       orderId,
-      utrNumber: cleanUtr || `UPI-MANUAL-${Math.floor(100000 + Math.random() * 900000)}`,
+      utrNumber: assignedUtr,
       amount,
       paymentMethod: 'UPI_QR_DIRECT',
       status: 'VERIFIED_PAID',
       verifiedAt: new Date().toISOString(),
       customer: customerData || {}
     };
+
+    // Persist to MongoDB
+    await saveOrderToDatabase({
+      orderId,
+      customerData,
+      cartItems,
+      subtotal,
+      discountAmount,
+      shippingFee,
+      totalAmount: amount,
+      paymentMethod: 'UPI_QR_DIRECT',
+      paymentId: assignedUtr,
+      status: 'VERIFIED_PAID'
+    });
 
     console.log('[UPI Payment Verified]:', verifiedOrder);
 
@@ -97,10 +218,9 @@ app.post('/api/create-order', async (req, res) => {
 
     const razorpay = getRazorpayInstance();
 
-    // If Razorpay keys are configured in .env, create order with Razorpay API
     if (razorpay) {
       const options = {
-        amount: Math.round(Number(amount) * 100), // amount in paise
+        amount: Math.round(Number(amount) * 100), // in paise
         currency: 'INR',
         receipt: receipt || `rcpt_${Date.now()}`,
         notes: notes || {}
@@ -114,7 +234,7 @@ app.post('/api/create-order', async (req, res) => {
       });
     }
 
-    // Fallback: If keys are not set, return simulated order for testing
+    // Fallback simulated order token
     const simulatedOrder = {
       id: `order_sim_${Math.floor(100000 + Math.random() * 900000)}`,
       entity: 'order',
@@ -142,10 +262,20 @@ app.post('/api/create-order', async (req, res) => {
   }
 });
 
-// 4. Verify Razorpay Payment Signature
-app.post('/api/verify-payment', (req, res) => {
+// 4. Verify Razorpay Payment Signature & MongoDB Order Save
+app.post('/api/verify-payment', async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { 
+      razorpay_order_id, 
+      razorpay_payment_id, 
+      razorpay_signature,
+      customerData,
+      cartItems,
+      totalAmount,
+      subtotal,
+      discountAmount,
+      shippingFee 
+    } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id) {
       return res.status(400).json({ error: 'Order ID and Payment ID are required' });
@@ -153,7 +283,6 @@ app.post('/api/verify-payment', (req, res) => {
 
     const secret = process.env.RAZORPAY_KEY_SECRET;
 
-    // If secret is set, verify cryptographic HMAC SHA-256 signature
     if (secret) {
       if (!razorpay_signature) {
         return res.status(400).json({ success: false, message: 'Signature missing' });
@@ -168,6 +297,20 @@ app.post('/api/verify-payment', (req, res) => {
       const isAuthentic = expectedSignature === razorpay_signature;
 
       if (isAuthentic) {
+        // Save to MongoDB
+        await saveOrderToDatabase({
+          orderId: razorpay_order_id,
+          customerData,
+          cartItems,
+          subtotal,
+          discountAmount,
+          shippingFee,
+          totalAmount,
+          paymentMethod: 'RAZORPAY_CARD',
+          paymentId: razorpay_payment_id,
+          status: 'VERIFIED_PAID'
+        });
+
         return res.json({
           success: true,
           verified: true,
@@ -184,7 +327,20 @@ app.post('/api/verify-payment', (req, res) => {
       }
     }
 
-    // In simulation mode without secret
+    // In simulation mode
+    await saveOrderToDatabase({
+      orderId: razorpay_order_id,
+      customerData,
+      cartItems,
+      subtotal,
+      discountAmount,
+      shippingFee,
+      totalAmount,
+      paymentMethod: 'RAZORPAY_CARD',
+      paymentId: razorpay_payment_id,
+      status: 'VERIFIED_PAID'
+    });
+
     return res.json({
       success: true,
       verified: true,
@@ -202,11 +358,26 @@ app.post('/api/verify-payment', (req, res) => {
   }
 });
 
-// 5. Cash on Delivery (COD) Order Endpoint
-app.post('/api/orders/cod', (req, res) => {
+// 5. Cash on Delivery (COD) Order Endpoint & MongoDB Save
+app.post('/api/orders/cod', async (req, res) => {
   try {
     const { orderData } = req.body;
     const codOrderId = `US-COD-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    if (orderData) {
+      await saveOrderToDatabase({
+        orderId: codOrderId,
+        customerData: orderData.formData,
+        cartItems: orderData.cart,
+        subtotal: orderData.subtotal,
+        discountAmount: orderData.discountAmount,
+        shippingFee: orderData.shippingFee,
+        totalAmount: orderData.totalAmount,
+        paymentMethod: 'COD',
+        paymentId: 'COD-PENDING-DELIVERY',
+        status: 'COD_PENDING'
+      });
+    }
 
     return res.json({
       success: true,
@@ -218,6 +389,40 @@ app.post('/api/orders/cod', (req, res) => {
   } catch (error) {
     console.error('Error handling COD order:', error);
     res.status(500).json({ error: 'Failed to process COD order' });
+  }
+});
+
+// 6. View Orders from MongoDB
+app.get('/api/orders', async (req, res) => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const orders = await Order.find().sort({ createdAt: -1 }).limit(50);
+      return res.json({ success: true, count: orders.length, orders });
+    }
+    return res.json({ success: true, count: 0, orders: [], message: 'MongoDB not currently connected' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch orders from database', details: err.message });
+  }
+});
+
+// 7. Save Customer Contact Inquiries to MongoDB
+app.post('/api/inquiries', async (req, res) => {
+  try {
+    const { name, email, inquiryType, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Name, email, and message are required' });
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      const inquiry = new Inquiry({ name, email, inquiryType, message });
+      await inquiry.save();
+      console.log(`📩 Contact inquiry from ${email} saved to MongoDB.`);
+    }
+
+    return res.json({ success: true, message: 'Inquiry received successfully' });
+  } catch (err) {
+    console.error('Error saving inquiry:', err);
+    res.status(500).json({ error: 'Failed to save inquiry' });
   }
 });
 
