@@ -14,7 +14,7 @@
 7. [Data Models & Schema Reference](#7-data-models--schema-reference)
 8. [Backend Server & API Endpoint Reference](#8-backend-server--api-endpoint-reference)
 9. [Payment Gateway Engineering (UPI & Razorpay)](#9-payment-gateway-engineering-upi--razorpay)
-10. [Authentication, Security & Cryptographic Verification Architecture](#10-authentication-security--cryptographic-verification-architecture)
+10. [Authentication & Security Architecture (Types, Mechanisms & JWT Comparison)](#10-authentication--security-architecture-types-mechanisms--jwt-comparison)
 11. [Local Development, Build & Run Procedures](#11-local-development-build--run-procedures)
 12. [Study Questions & Self-Evaluation Checklist](#12-study-questions--self-evaluation-checklist)
 
@@ -361,62 +361,45 @@ upi://pay?pa=urbansole.pay@okaxis&pn=Urban%20Sole%20Yeola&am=7499&cu=INR&tn=Urba
 
 ---
 
-## 10. Authentication, Security & Cryptographic Verification Architecture
+## 10. Authentication & Security Architecture (Types, Mechanisms & JWT Comparison)
 
-Understanding how authentication and security work in an e-commerce platform is critical. Urban Sole implements a **multi-tiered security and authentication model** tailored for direct-to-consumer (D2C) transactions:
+### 10.1 Quick Classification Matrix: What Authentication Types are Used?
 
-```mermaid
-flowchart TD
-    subgraph Tier1 ["Tier 1: Customer Identity Model"]
-        Guest["Guest-First Frictionless Checkout\n(Zero Pre-Purchase Password Wall)"]
-        Capture["Order Identity Capture\n• Verified 10-Digit Phone\n• Contact Email • Delivery Pincode"]
-        Session["Browser Session Identity\n• LocalStorage Key Serialization\n• Client Session Tokens"]
-    end
+| Level / Layer | Authentication Type Used in Urban Sole | Exact Mechanism | Is JWT Used Here? |
+| :--- | :--- | :--- | :--- |
+| **1. Customer Identity & Shopping State** | **Stateless Guest-Token & Session Identity** | Browser `localStorage` serialization (`urbansole_cart`, `urbansole_wishlist`) + Contact Data Binding | **No** (Uses Frictionless Guest Model; JWT can be added via 10.5) |
+| **2. Payment Authorization (Customer 2FA)** | **Hardware Device Token + MPIN / 3D-Secure 2.0** | NPCI 4/6-Digit UPI MPIN on Android/iOS + Bank SMS OTP on Cards | **No** (Delegated to RBI/NPCI Regulated Banking Channels) |
+| **3. Frontend-to-Backend Payment Verification** | **HMAC-SHA256 Cryptographic Signature Authentication** | Hash Message Authentication Code generated using `crypto.createHmac` and private `RAZORPAY_KEY_SECRET` | **Cryptographic Signature Token** (Similar mathematical integrity guarantees to JWT signatures) |
+| **4. Backend-to-Gateway API Access** | **HTTP Basic Authentication** | Razorpay REST API authenticated over TLS via `Key_ID` (username) and `Key_Secret` (password) | **No** (Standard API Key Pair over HTTPS) |
+| **5. Direct UPI Reconciliation** | **Banking UTR Token Verification** | 12-digit Indian Banking Unique Transaction Reference (`utrNumber`) checksum audit | **No** (National Financial Switch UTR Reference Token) |
 
-    subgraph Tier2 ["Tier 2: Payment Authentication (2FA)"]
-        UPI2FA["UPI 2-Factor Authentication\nNPCI MPIN on Mobile Device\n(Handled inside Google Pay / PhonePe)"]
-        Card2FA["Card 3D-Secure 2.0\nBank OTP Verification\n(Delegated to Razorpay Cloud)"]
-    end
+---
 
-    subgraph Tier3 ["Tier 3: Cryptographic Server Integrity"]
-        HMAC["HMAC SHA-256 Signature\nPayload = order_id + '|' + payment_id\nSecret = RAZORPAY_KEY_SECRET"]
-        UTR["NPCI Bank UTR Validation\n12-Digit Numeric Checksum & Audit"]
-        Env["Secrets Isolation\n.env gitignored • Client/Server Separation"]
-    end
+### 10.2 Detailed Breakdown of Authentication Types
 
-    Tier1 --> Tier2 --> Tier3
-```
+#### A. Guest-First Session Identity Model (Why NOT JWT by Default?)
+In modern e-commerce (such as Shopify, Nike SNKRS, and Yeezy), requiring users to register a username, confirm an email verification link, and memorize a password before adding a sneaker to their bag leads to a **30%–35% cart abandonment drop-off**.
+- **Urban Sole uses a Guest-First Identity Model**:
+  1. The user's active shopping session is preserved locally in `Window.localStorage`.
+  2. At checkout, the customer provides verified contact credentials: **Full Name**, **10-Digit Mobile Number**, and **Email Address**.
+  3. The system generates an authoritative order token (`#US-XXXXXX` or `#US-COD-XXXXXX`) that binds the customer identity, order items, and verified payment receipt together.
 
-### 10.1 Customer Authentication Model: Guest-First Architecture
-- **Why Guest Checkout?**
-  In modern high-fashion and sneaker e-commerce (such as Shopify Plus stores, Nike SNKRS, and Yeezy drops), forcing users to create an account, verify an email link, and create passwords before checkout results in a **30%–35% cart abandonment rate**. 
-- **How Identity is Handled**:
-  1. The user's shopping state (Cart, Wishlist, Active Promo Voucher) is bound to the client instance via persistent `localStorage` (`urbansole_cart` and `urbansole_wishlist`).
-  2. At checkout, the user provides their authoritative contact identity:
-     - **Full Name**
-     - **10-Digit Mobile Number** (Used for courier SMS dispatch updates)
-     - **Email Address** (Used for digital order receipts and dispatch tracking)
-     - **Delivery Address & PIN Code**
-  3. This identity is cryptographically tied to the unique generated Order ID (`#US-XXXXXX` or `#US-COD-XXXXXX`).
+#### B. Delegated Banking Two-Factor Authentication (2FA)
+The platform adheres strictly to **PCI-DSS compliance guidelines** by never storing or touching customer credit card numbers, CVVs, passwords, or UPI PINs on its own servers:
+- **Instant UPI 2FA**:
+  - *Factor 1 (Possession)*: The customer's physical smartphone running an authorized app (GPay, PhonePe, Paytm, BHIM, Cred).
+  - *Factor 2 (Knowledge)*: The customer's secret 4-digit or 6-digit **NPCI UPI MPIN** entered on their bank's encrypted keyboard.
+- **Card 3D Secure 2.0**:
+  - Authenticated via dynamic One-Time Passwords (OTP) sent to the cardholder's mobile by their issuing bank.
 
-### 10.2 Payment Authentication: Delegated 2-Factor Authentication (2FA)
-The application never handles or stores sensitive credit card numbers, CVVs, bank passwords, or UPI PINs directly on the application server. Authentication is delegated to regulated financial institutions:
-
-1. **UPI Two-Factor Authentication**:
-   - Factor 1 (Possession): The customer's physical smartphone running an authorized UPI application (GPay, PhonePe, Paytm, BHIM, Cred).
-   - Factor 2 (Knowledge): The customer's secret 4-digit or 6-digit **NPCI UPI MPIN** entered directly into their bank's encrypted keyboard interface.
-2. **Card Two-Factor Authentication (3D Secure 2.0)**:
-   - When paying via Razorpay, the cardholder is authenticated via an SMS One-Time Password (OTP) or bank biometric approval mandated by the Reserve Bank of India (RBI).
-
-### 10.3 Cryptographic Server-to-Server Authentication: HMAC SHA-256
-To prevent payment tampering (e.g. an attacker modifying a client-side JavaScript file to report a successful transaction for ₹1 instead of ₹7,499), Urban Sole enforces **server-side cryptographic verification**:
-
-1. When a transaction completes on Razorpay, Razorpay sends back three fields to the frontend:
+#### C. Cryptographic HMAC-SHA256 Signature Authentication
+To ensure that an attacker cannot spoof or tamper with payment receipts (e.g., claiming they paid ₹7,499 when they only paid ₹1), the backend implements **HMAC-SHA256 digital signature verification**:
+1. When Razorpay confirms payment on the client, it returns a cryptographically signed payload:
    - `razorpay_order_id`
    - `razorpay_payment_id`
    - `razorpay_signature`
-2. The frontend sends these three values to `server.js`: `POST /api/verify-payment`.
-3. The Express backend uses Node's native `crypto` library to recalculate the expected signature using the private `RAZORPAY_KEY_SECRET`:
+2. The client transmits these tokens to `POST /api/verify-payment`.
+3. The Express server uses Node's native `crypto` module to compute the HMAC hash using its private `RAZORPAY_KEY_SECRET`:
    ```javascript
    const body = razorpay_order_id + '|' + razorpay_payment_id;
    const expectedSignature = crypto
@@ -426,11 +409,25 @@ To prevent payment tampering (e.g. an attacker modifying a client-side JavaScrip
 
    const isAuthentic = (expectedSignature === razorpay_signature);
    ```
-4. If `isAuthentic === true`, the order status transitions to `VERIFIED_PAID`. If the payload was tampered with, the HMAC hash does not match, and the transaction is immediately rejected with HTTP 400.
+4. If the signature matches, the server authenticates the transaction as legitimate and updates the order status to `VERIFIED_PAID`.
 
-### 10.4 Secrets Isolation & Frontend-Backend Boundary
-The codebase strictly separates public environment variables from private server secrets:
-- **Client-Safe Keys (`VITE_` prefix)**:
+---
+
+### 10.3 Comparison: Urban Sole Model vs. JWT vs. Session Cookies vs. OAuth 2.0
+
+| Feature | Urban Sole Current Model | JSON Web Tokens (JWT) | Traditional Session Cookies | OAuth 2.0 (Google/GitHub) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Purpose** | High-conversion D2C guest checkout & cryptographic payment verification | User login, profile dashboards & RBAC API protection | Server-side user session management | 1-Click third-party social sign-in |
+| **Where State Lives** | `localStorage` + Ephemeral order payload + Server HMAC | Client-side signed string (`header.payload.signature`) | Server memory / Redis table (`connect.sid` cookie) | Identity Provider (Google, Apple) |
+| **Pre-Checkout Friction** | **Zero friction** (No password or signup barrier) | Requires registration/login screen before or during checkout | Requires login session establishment | 1-click popup authorization |
+| **Payment Security** | HMAC SHA-256 Signature Verification + NPCI MPIN 2FA | HMAC SHA-256 / RSA Token Verification | Session ID validation | Scoped OAuth Access Token |
+| **Best Used For** | Fast e-commerce purchases, mobile UPI scan-and-pay | User profile dashboards, order history archives, admin CMS | Enterprise portals, traditional web apps | Quick login without memorizing passwords |
+
+---
+
+### 10.4 Secrets Isolation & Frontend-Backend Security Boundary
+The application strictly isolates public client parameters from sensitive backend secrets:
+- **Client-Safe Variables (`VITE_` prefix in `.env`)**:
   - `VITE_MERCHANT_UPI_ID`: Public receiving UPI address displayed in the QR code.
   - `VITE_MERCHANT_NAME`: Public store name displayed in the QR code and checkout header.
   - `VITE_RAZORPAY_KEY_ID`: Public gateway identifier used by the client-side Razorpay SDK modal.
@@ -438,18 +435,21 @@ The codebase strictly separates public environment variables from private server
   - `RAZORPAY_KEY_SECRET`: Private merchant secret used solely by Express in `server.js` to sign and verify HMAC signatures.
   - Excluded from version control via `.gitignore` (`.env`, `*.env`, `.env*.local`).
 
-### 10.5 Production Roadmap: How to Add Full User Login / JWT Accounts
-If you choose to extend the project with traditional registered user accounts, here is the recommended architecture pattern:
+---
+
+### 10.5 Production Roadmap: How to Add Full JWT (JSON Web Token) User Accounts
+
+If your project requirements (or university/interview evaluation) require **JWT Authentication**, here is the exact blueprint and code implementation to add it:
 
 ```mermaid
 flowchart LR
-    subgraph ClientAuth ["Frontend Client"]
-        LoginForm["Login / Register Form\n(Email + Password / Phone OTP)"]
-        JWTStorage["Stores JWT Token in\nhttpOnly Cookie or Memory"]
+    subgraph ClientAuth ["Frontend Client (React 19)"]
+        LoginForm["Login / Register Form\n(Email + Password)"]
+        JWTStorage["Stores JWT Token in\nhttpOnly Cookie or localStorage"]
         AuthContext["AuthContext.Provider\n(currentUser, isAuthenticated)"]
     end
 
-    subgraph BackendAuth ["Express Server"]
+    subgraph BackendAuth ["Express Server (server.js)"]
         AuthRoute["POST /api/auth/register\nPOST /api/auth/login"]
         Bcrypt["bcrypt.hash()\nbcrypt.compare()"]
         JWTIssuer["jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })"]
@@ -465,27 +465,64 @@ flowchart LR
     AuthRoute --> Bcrypt --> UsersTable
     AuthRoute --> JWTIssuer --> JWTStorage
     JWTStorage --> AuthContext
-    AuthContext -- Authorization: Bearer JWT --> AuthMiddleware
+    AuthContext -- Authorization: Bearer <JWT> --> AuthMiddleware
     AuthMiddleware --> OrdersTable
 ```
 
-1. **Password Hashing**: Use `bcrypt` or `argon2` to hash user passwords before storing in a `users` table or MongoDB collection (salt rounds: 10–12).
-2. **Token Generation**: Upon successful authentication, the server signs a **JSON Web Token (JWT)** containing `{ userId, email, role }` signed with a secure `JWT_SECRET`.
-3. **Protected Routes Middleware**:
-   ```javascript
-   export const verifyToken = (req, res, next) => {
-     const authHeader = req.headers['authorization'];
-     const token = authHeader && authHeader.split(' ')[1];
-     if (!token) return res.status(401).json({ error: 'Access token required' });
+#### Step 1: Install JWT and Password Hashing Libraries
+```bash
+npm install jsonwebtoken bcrypt
+```
 
-     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-       if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-       req.user = user;
-       next();
-     });
-   };
-   ```
-4. **Order History Association**: When `req.user` is present during checkout, orders are linked to `user.id`, allowing customers to view past purchases and track ongoing deliveries in an "Account / My Orders" dashboard.
+#### Step 2: Add Auth Routes in `server.js`
+```javascript
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'urbansole_super_secret_jwt_key_2026';
+
+// 1. User Registration Route
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  // Save { name, email, password: hashedPassword } to database
+  const user = { id: `usr_${Date.now()}`, name, email };
+  const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+  
+  res.json({ success: true, token, user });
+});
+
+// 2. User Login Route
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  // Retrieve user from database by email
+  // const isMatch = await bcrypt.compare(password, user.password);
+  
+  const token = jwt.sign({ userId: 'usr_123', email }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ success: true, token });
+});
+
+// 3. Protected Route Middleware (Verifies JWT)
+export const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // "Bearer <TOKEN>"
+
+  if (!token) return res.status(401).json({ error: 'Access token required' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
+
+// 4. Protected User Order History Route
+app.get('/api/user/orders', authenticateToken, (req, res) => {
+  // Query orders belonging to req.user.userId
+  res.json({ orders: [] });
+});
+```
 
 ---
 
@@ -524,14 +561,14 @@ VITE_RAZORPAY_KEY_ID=
 
 Use these questions to test and solidify your understanding of the codebase:
 
-1. **Architecture**: Why does the project use `concurrently` in `npm run dev:all` instead of running two separate terminal commands?
-2. **State Management**: Why is `CartContext` placed at the top level of `App.jsx`, and how does `localStorage` prevent cart loss on page refresh?
-3. **Vite Proxy**: In `vite.config.js`, what does `server.proxy['/api']` do when the React client makes a call to `fetch('/api/create-order')`?
-4. **Authentication**: Why do modern luxury D2C footwear platforms often choose a **Guest-First checkout** model over mandatory pre-checkout password registration?
-5. **Security & Cryptography**: How does the Express backend use Node's native `crypto.createHmac` with SHA-256 to ensure that a customer cannot tamper with the order amount returned by Razorpay?
-6. **Payment 2FA**: Where does the 2-Factor Authentication (2FA) take place when a customer scans the dynamic UPI QR code on their phone?
-7. **Design System**: Where are global colors and font definitions stored, and what CSS variable controls the warm cream paper background?
-8. **Pricing Engine**: How does `subtotal >= 2999` dynamically recalculate the free shipping progress meter, shipping fee waiver, and final total?
+1. **Authentication Classification**: What type of customer authentication does Urban Sole currently use, and why is this preferred for high-conversion D2C footwear stores over mandatory JWT pre-login?
+2. **Cryptographic Signatures vs JWT**: How does the HMAC-SHA256 signature verification in `POST /api/verify-payment` provide similar cryptographic mathematical proof of data integrity to a JWT token signature?
+3. **Payment 2FA**: How does Two-Factor Authentication (2FA) protect transactions when a customer scans the dynamic UPI QR code on their phone?
+4. **Architecture**: Why does the project use `concurrently` in `npm run dev:all` instead of running two separate terminal commands?
+5. **State Management**: Why is `CartContext` placed at the top level of `App.jsx`, and how does `localStorage` prevent cart loss on page refresh?
+6. **Vite Proxy**: In `vite.config.js`, what does `server.proxy['/api']` do when the React client makes a call to `fetch('/api/create-order')`?
+7. **Security Boundary**: Why must `RAZORPAY_KEY_SECRET` never be prefixed with `VITE_` or imported inside a React `.jsx` file?
+8. **JWT Implementation**: If you need to add registered user profiles to this project, what libraries would you install and where would the JWT verification middleware sit?
 
 ---
 
