@@ -16,24 +16,52 @@ app.use(cors());
 app.use(express.json());
 
 // =========================================================================
-// MongoDB Connection via Mongoose
+// MongoDB Connection via Mongoose with Auto-Embedded Zero-Config Engine
 // =========================================================================
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/urbansole';
 let isDbConnected = false;
+let dbMode = 'uninitialized';
+let memoryServerInstance = null;
 
 mongoose.set('strictQuery', false);
 
 const connectMongoDB = async () => {
+  // If user provided a cloud Atlas cluster, prioritize it
+  const isCloudUri = MONGODB_URI.startsWith('mongodb+srv://');
+
   try {
+    console.log(`Connecting to MongoDB (${isCloudUri ? 'Cloud Atlas' : 'Local URI'})...`);
     await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000 // 5 seconds timeout
+      serverSelectionTimeoutMS: 2500
     });
     isDbConnected = true;
-    console.log('✅ MongoDB connected successfully to database:', mongoose.connection.name);
+    dbMode = isCloudUri ? 'cloud_atlas' : 'standalone_local';
+    console.log(`✅ MongoDB connected successfully to database: ${mongoose.connection.name} [${dbMode}]`);
   } catch (err) {
-    isDbConnected = false;
-    console.warn('⚠️  MongoDB connection notice:', err.message);
-    console.log('👉 To connect a cloud database, set MONGODB_URI in your .env file with your MongoDB Atlas connection string.');
+    console.warn(`⚠️  External MongoDB not detected (${err.message}).`);
+    console.log('⚡ Launching embedded zero-config MongoDB instance...');
+
+    try {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      memoryServerInstance = await MongoMemoryServer.create({
+        instance: { dbName: 'urbansole' }
+      });
+      const embeddedUri = memoryServerInstance.getUri();
+      
+      await mongoose.connect(embeddedUri, {
+        dbName: 'urbansole'
+      });
+      
+      isDbConnected = true;
+      dbMode = 'embedded_mongodb';
+      console.log('✅ Embedded MongoDB started and connected successfully!');
+      console.log(`📦 Database Host: ${mongoose.connection.host}:${mongoose.connection.port}`);
+      console.log(`🗄️ Database Name: ${mongoose.connection.name}`);
+    } catch (embeddedErr) {
+      isDbConnected = false;
+      dbMode = 'in_memory_fallback';
+      console.warn('⚠️  Could not launch embedded MongoDB:', embeddedErr.message);
+    }
   }
 };
 
@@ -141,11 +169,16 @@ app.get('/api/config', (req, res) => {
 // Database status diagnostic endpoint
 app.get('/api/db-status', (req, res) => {
   const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const isConnected = mongoose.connection.readyState === 1;
   res.json({
-    connected: mongoose.connection.readyState === 1,
+    connected: isConnected,
     status: states[mongoose.connection.readyState] || 'unknown',
     database: mongoose.connection.name || 'urbansole',
-    host: mongoose.connection.host || 'none'
+    host: mongoose.connection.host ? `${mongoose.connection.host}:${mongoose.connection.port || ''}` : 'none',
+    mode: dbMode,
+    message: isConnected
+      ? `Active MongoDB (${dbMode}) connected and operational.`
+      : 'Database not connected'
   });
 });
 
